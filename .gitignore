@@ -1,0 +1,3 @@
+*.nc
+.ipynb_checkpoints/
+connection_list.txt
