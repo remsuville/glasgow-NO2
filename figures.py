@@ -33,7 +33,7 @@ def make_map(df, city, bbox):
         },
         zoom=_zoom_for_bbox(bbox),
         map_style="open-street-map",
-        title=f"NO₂ over {city} — 9-day mean (June 2024)",
+        title=f"NO2 over {city}",
         color_continuous_scale="Reds",
     )
 
@@ -43,6 +43,6 @@ def make_timeseries(df, city):
     return px.line(
         daily_mean,
         x="t", y="NO2",
-        title=f"Daily Mean NO2 — {city} (June 2024)",
+        title=f"Daily Mean NO2 — {city}",
         labels={"t": "Date", "NO2": "NO2 (mol/m2)"},
     )
