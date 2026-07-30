@@ -1,23 +1,11 @@
 from dash import dcc, html
 from datetime import date
 
-from config import CITIES, DATE_RANGE
+from config import DATE_RANGE, REGION_NAME
 
 
 layout = html.Div([
-    html.H1("Sentinel-5P NO2 Dashboard"),
-
-    #Select City
-    html.Div([
-        html.Label("Select city:"),
-        dcc.Dropdown(
-            id="city-dropdown",
-            options=[{"label": c, "value": c} for c in CITIES.keys()],
-            value="Central Belt",
-            clearable=False,
-        ),
-    ], style={"width": "300px"}),
-
+    html.H1(f"Sentinel-5P NO2 Dashboard — {REGION_NAME}"),
 
     # Select Date
     html.Div([
