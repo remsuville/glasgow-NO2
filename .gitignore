@@ -1,3 +1,12 @@
 *.nc
+__pycache__/
+*.py[cod]
 .ipynb_checkpoints/
 connection_list.txt
+
+# Downloaded boundary data — keep the README, ignore the datasets
+boundaries/*
+!boundaries/README.md
+
+# Cached API responses and derived zone geometry
+cache/
