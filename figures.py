@@ -1,4 +1,8 @@
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+
+from config import REGION_NAME
 
 
 def _zoom_for_bbox(bbox):
@@ -12,7 +16,51 @@ def _zoom_for_bbox(bbox):
     return 10
 
 
-def make_map(df, city, bbox):
+def grid_step(values):
+    """Spacing between adjacent grid coordinates.
+
+    openEO resamples S5P onto a regular lat/lon grid, so every gap between
+    *adjacent* unique coordinates is identical. The median is taken because
+    the grid is sparse — a date with no swath coverage leaves holes, and
+    those gaps are multiples of the true step, never smaller than it.
+    """
+    unique = np.unique(np.asarray(values))
+    if unique.size < 2:
+        raise ValueError("need at least two distinct coordinates to infer grid step")
+    return float(np.median(np.diff(unique)))
+
+
+def cell_polygons(cells, dx=None, dy=None):
+    """GeoJSON FeatureCollection of one rectangle per pixel footprint.
+
+    `cells` has columns x, y holding cell *centres* (EPSG:4326). Each feature
+    is the cell's true extent, centre +/- half a step. Feature ids are the
+    positional index of `cells`, so `locations` can index straight into it.
+
+    This is the geometry Task 4 needs for area-weighted zonal statistics —
+    the map is just the first consumer of it.
+    """
+    dx = grid_step(cells["x"]) if dx is None else dx
+    dy = grid_step(cells["y"]) if dy is None else dy
+    hx, hy = dx / 2, dy / 2
+
+    features = []
+    for i, (x, y) in enumerate(zip(cells["x"], cells["y"])):
+        w, e, s, n = x - hx, x + hx, y - hy, y + hy
+        features.append({
+            "type": "Feature",
+            "id": i,
+            "geometry": {
+                "type": "Polygon",
+                # closed ring, counter-clockwise
+                "coordinates": [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+            },
+            "properties": {},
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+
+def make_map(df, bbox):
     valid_counts = df.groupby("t")["NO2"].count()
     best_day = valid_counts.idxmax()
     all_dates = sorted(df["t"].unique())
@@ -23,26 +71,48 @@ def make_map(df, city, bbox):
     window_df = df[df["t"].isin(window_dates)]
     no2_mean = window_df.groupby(["x", "y"])["NO2"].mean().reset_index()
 
-    return px.density_map(
-        no2_mean,
-        lat="y", lon="x", z="NO2",
-        radius=20,
-        center={
+    # Step comes from the full frame, not the windowed subset: a sparse window
+    # can miss whole rows/columns and overestimate the spacing.
+    dx, dy = grid_step(df["x"]), grid_step(df["y"])
+    geojson = cell_polygons(no2_mean, dx=dx, dy=dy)
+
+    fig = go.Figure(go.Choroplethmap(
+        geojson=geojson,
+        locations=np.arange(len(no2_mean)),
+        z=no2_mean["NO2"],
+        colorscale="Reds",
+        marker_opacity=0.75,
+        marker_line_width=0.5,
+        marker_line_color="rgba(255,255,255,0.35)",
+        colorbar_title="NO2<br>(mol/m2)",
+        customdata=no2_mean[["x", "y"]],
+        hovertemplate=(
+            "NO2: %{z:.3e} mol/m2<br>"
+            "cell centre: %{customdata[1]:.4f}, %{customdata[0]:.4f}"
+            "<extra></extra>"
+        ),
+    ))
+    fig.update_layout(
+        map_style="open-street-map",
+        map_center={
             "lat": (bbox["north"] + bbox["south"]) / 2,
             "lon": (bbox["west"] + bbox["east"]) / 2,
         },
-        zoom=_zoom_for_bbox(bbox),
-        map_style="open-street-map",
-        title=f"NO2 over {city}",
-        color_continuous_scale="Reds",
+        map_zoom=_zoom_for_bbox(bbox),
+        title=(
+            f"NO2 over {REGION_NAME} — {len(no2_mean)} cells, "
+            f"{window_dates[0]:%Y-%m-%d} to {window_dates[-1]:%Y-%m-%d}"
+        ),
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
     )
+    return fig
 
 
-def make_timeseries(df, city):
+def make_timeseries(df):
     daily_mean = df.groupby("t")["NO2"].mean().reset_index()
     return px.line(
         daily_mean,
         x="t", y="NO2",
-        title=f"Daily Mean NO2 — {city}",
+        title=f"Daily Mean NO2 — {REGION_NAME}",
         labels={"t": "Date", "NO2": "NO2 (mol/m2)"},
     )
