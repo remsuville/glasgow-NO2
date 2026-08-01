@@ -4,9 +4,12 @@ __pycache__/
 .ipynb_checkpoints/
 connection_list.txt
 
-# Downloaded boundary data — keep the README, ignore the datasets
+# Ignore markdown by default — un-ignore each doc explicitly.
+*.md
+!docs/summary.md
+
+# Downloaded boundary data
 boundaries/*
-!boundaries/README.md
 
 # Cached API responses and derived zone geometry
 cache/
