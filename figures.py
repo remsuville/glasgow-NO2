@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -37,8 +39,8 @@ def cell_polygons(cells, dx=None, dy=None):
     is the cell's true extent, centre +/- half a step. Feature ids are the
     positional index of `cells`, so `locations` can index straight into it.
 
-    This is the geometry Task 4 needs for area-weighted zonal statistics —
-    the map is just the first consumer of it.
+    This is the geometry area-weighted zonal statistics need — the map is just
+    the first consumer of it.
     """
     dx = grid_step(cells["x"]) if dx is None else dx
     dy = grid_step(cells["y"]) if dy is None else dy
@@ -102,6 +104,75 @@ def make_map(df, bbox):
         title=(
             f"NO2 over {REGION_NAME} — {len(no2_mean)} cells, "
             f"{window_dates[0]:%Y-%m-%d} to {window_dates[-1]:%Y-%m-%d}"
+        ),
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
+    )
+    return fig
+
+
+def make_zonal_map(zonal, bbox, kind_label=""):
+    """Choropleth of area-weighted mean NO2 per administrative zone.
+
+    `zonal` comes from `zonal.zonal_means`. Zones whose mean was withheld (no
+    overlapping valid pixel, or coverage below the threshold) are drawn in flat
+    grey rather than omitted — a hole in the map reads as "no zone here", which
+    is a different and wrong claim.
+
+    Shares the `Reds` scale with `make_map` on purpose: both show the same
+    quantity in the same units, so the pixel map and the zonal map stay
+    visually comparable.
+    """
+    valued = zonal[zonal["no2_mean"].notna()]
+    missing = zonal[zonal["no2_mean"].isna()]
+
+    fig = go.Figure()
+
+    if not missing.empty:
+        fig.add_trace(go.Choroplethmap(
+            geojson=json.loads(missing.to_json()),
+            locations=missing["zone_id"],
+            featureidkey="properties.zone_id",
+            z=np.zeros(len(missing)),
+            colorscale=[[0, "rgba(150,150,150,0.35)"], [1, "rgba(150,150,150,0.35)"]],
+            showscale=False,
+            marker_line_width=0.4,
+            marker_line_color="rgba(255,255,255,0.5)",
+            customdata=missing[["zone_name"]],
+            hovertemplate="%{customdata[0]}<br>no NO2 coverage<extra></extra>",
+        ))
+
+    fig.add_trace(go.Choroplethmap(
+        geojson=json.loads(valued.to_json()),
+        locations=valued["zone_id"],
+        featureidkey="properties.zone_id",
+        z=valued["no2_mean"],
+        colorscale="Reds",
+        marker_opacity=0.8,
+        marker_line_width=0.4,
+        marker_line_color="rgba(255,255,255,0.5)",
+        colorbar_title="NO2<br>(mol/m2)",
+        colorbar_tickformat=".1e",
+        customdata=valued[["zone_name", "coverage", "n_cells"]],
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>"
+            "mean NO2: %{z:.3e} mol/m2<br>"
+            "area coverage: %{customdata[1]:.0%}<br>"
+            "contributing cells: %{customdata[2]}"
+            "<extra></extra>"
+        ),
+    ))
+
+    label = f" — {kind_label}" if kind_label else ""
+    fig.update_layout(
+        map_style="open-street-map",
+        map_center={
+            "lat": (bbox["north"] + bbox["south"]) / 2,
+            "lon": (bbox["west"] + bbox["east"]) / 2,
+        },
+        map_zoom=_zoom_for_bbox(bbox),
+        title=(
+            f"Area-weighted mean NO2 by zone{label} — "
+            f"{len(valued)} of {len(zonal)} zones with data"
         ),
         margin={"r": 0, "t": 40, "l": 0, "b": 0},
     )
