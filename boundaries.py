@@ -34,14 +34,26 @@ SCOTLAND_ENVELOPE = {"west": -9.0, "south": 54.5, "east": -0.5, "north": 61.0}
 # candidates and we resolve against whatever the downloaded file actually has.
 ZONE_SETS = {
     "councils": {
-        "patterns": ["*ouncil*", "*_la_*", "*local_auth*", "*LAD*"],
+        # Spatial Hub ships council areas as `pub_las` — no "council" or "LAD"
+        # anywhere in the filename, hence the explicit pattern.
+        "patterns": ["*ouncil*", "*pub_las*", "*_la_*", "*local_auth*", "*LAD*"],
         "id_candidates": ["code", "la_code", "LAD24CD", "LAD21CD", "CODE", "lad_code"],
         "name_candidates": ["name", "local_auth", "LAD24NM", "LAD21NM", "NAME", "la_name"],
     },
     "datazones": {
         "patterns": ["*ata*one*", "*DZ*", "*SG_DataZone*"],
-        "id_candidates": ["DataZone", "datazone", "DZ_CODE", "code"],
-        "name_candidates": ["Name", "DZ_NAME", "name", "DataZone"],
+        "id_candidates": ["dzcode", "DataZone", "datazone", "DZ_CODE", "code"],
+        "name_candidates": ["dzname", "Name", "DZ_NAME", "name", "DataZone"],
+    },
+    # Intermediate Zones ship in two coastal variants: MHW cuts at mean high
+    # water (land only), EoR extends to the extent of the realm (out to sea).
+    # MHW is the one to use — an EoR zone's mean would average NO2 over open
+    # water it has no population in. The pattern pins MHW so a glob sorted
+    # alphabetically can't quietly hand back EoR instead.
+    "intzones": {
+        "patterns": ["*ntermediate*MHW", "*ntermediate*one*", "*IZ*"],
+        "id_candidates": ["IZCode", "izcode", "IZ_CODE", "code"],
+        "name_candidates": ["IZName", "izname", "IZ_NAME", "name"],
     },
 }
 
@@ -161,8 +173,8 @@ def load_zones(kind, bbox=None, clip=False, use_cache=True):
     would silently redefine what a zone mean covers. Pass clip=True to cut
     geometries at the bbox edge instead.
 
-    `kind` is a key of ZONE_SETS. Keeping it a parameter is what makes the
-    Task 5 boundary swap a re-call rather than a rewrite.
+    `kind` is a key of ZONE_SETS. Keeping it a parameter is what makes swapping
+    one boundary set for another a re-call rather than a rewrite.
     """
     if kind not in ZONE_SETS:
         raise KeyError(f"Unknown zone set '{kind}'. Known: {list(ZONE_SETS)}")
