@@ -1,10 +1,5 @@
-"""Scottish administrative boundaries, loaded and reprojected deliberately.
-
-The NO2 grid from openEO is EPSG:4326 (lat/lon degrees). Scottish vector data
-is almost always EPSG:27700 (British National Grid, metres). A CRS mismatch
-between the two fails *silently* — no exception, just every pixel assigned to
-the wrong zone — so every step here logs or asserts rather than trusting a
-default.
+"""The NO2 grid from openEO is EPSG:4326 (lat/lon degrees). Scottish vector data
+is taken as EPSG:27700 (British National Grid, metres).
 
 Vectors are reprojected to match the raster, not the other way round:
 transforming a few thousand polygons is far cheaper than resampling a grid.
@@ -24,18 +19,13 @@ logger = logging.getLogger(__name__)
 BOUNDARY_DIR = "boundaries"
 TARGET_CRS = "EPSG:4326"
 
-# Scotland's plausible lat/lon envelope, deliberately generous. Used to catch
-# untransformed British National Grid coordinates leaking through: BNG values
-# are eastings/northings in the hundreds of thousands and blow straight past
-# these limits, which is exactly the silent failure we want to make loud.
+# Scotland's plausible lat/lon envelope
 SCOTLAND_ENVELOPE = {"west": -9.0, "south": 54.5, "east": -0.5, "north": 61.0}
 
-# Column names vary between publishers and vintages, so each zone set lists
-# candidates and we resolve against whatever the downloaded file actually has.
+# Column names vary between publishers, so each zone set lists
+# candidates and we resolve against whatever the downloaded file actually has
 ZONE_SETS = {
     "councils": {
-        # Spatial Hub ships council areas as `pub_las` — no "council" or "LAD"
-        # anywhere in the filename, hence the explicit pattern.
         "patterns": ["*ouncil*", "*pub_las*", "*_la_*", "*local_auth*", "*LAD*"],
         "id_candidates": ["code", "la_code", "LAD24CD", "LAD21CD", "CODE", "lad_code"],
         "name_candidates": ["name", "local_auth", "LAD24NM", "LAD21NM", "NAME", "la_name"],
@@ -45,11 +35,8 @@ ZONE_SETS = {
         "id_candidates": ["dzcode", "DataZone", "datazone", "DZ_CODE", "code"],
         "name_candidates": ["dzname", "Name", "DZ_NAME", "name", "DataZone"],
     },
-    # Intermediate Zones ship in two coastal variants: MHW cuts at mean high
-    # water (land only), EoR extends to the extent of the realm (out to sea).
-    # MHW is the one to use — an EoR zone's mean would average NO2 over open
-    # water it has no population in. The pattern pins MHW so a glob sorted
-    # alphabetically can't quietly hand back EoR instead.
+
+    # MHW is being used here to reduce the error due to zero-pop areas over water
     "intzones": {
         "patterns": ["*ntermediate*MHW", "*ntermediate*one*", "*IZ*"],
         "id_candidates": ["IZCode", "izcode", "IZ_CODE", "code"],
@@ -61,7 +48,7 @@ VECTOR_EXTENSIONS = (".shp", ".gpkg", ".geojson", ".json", ".parquet")
 
 
 def _find_source(kind):
-    """Locate the downloaded boundary file for `kind` under BOUNDARY_DIR."""
+    """Locate boundary file for `kind` under BOUNDARY_DIR."""
     spec = ZONE_SETS[kind]
     for pattern in spec["patterns"]:
         for ext in VECTOR_EXTENSIONS:
@@ -78,8 +65,7 @@ def _find_source(kind):
 
 
 def inspect_source(path):
-    """Log everything we need to know about a boundary file before trusting it.
-
+    """Log everything we need to know about a boundary file first and
     Stands in for the QGIS pass: CRS, attribute columns, feature count,
     geometry types, validity and native bounds.
     """
@@ -135,7 +121,7 @@ def _repair_geometry(gdf):
 
 
 def _reproject(gdf, kind):
-    """Reproject to TARGET_CRS, asserting the transform actually happened."""
+    """Reproject to TARGET_CRS, ensuring the transform actually happened."""
     if gdf.crs is None:
         # set_crs would only *label* the data; it does not transform anything.
         # Guessing here is how metres get stamped as degrees, so refuse.
