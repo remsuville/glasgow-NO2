@@ -1,6 +1,5 @@
 from dash import Input, Output, State, no_update
 from dash.exceptions import PreventUpdate
-
 from boundaries import ZONE_SETS, load_zones
 from config import BBOX, REGION_NAME
 from data import get_no2
@@ -11,10 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# A zone whose mean rests on less than this fraction of its area is reported as
-# "no data" rather than coloured in. Zones clipped by the study bbox are the
-# usual case — Perth and Kinross sits 2% inside it, and a Central Belt sliver
-# should not be presented as a value for the whole council.
+
 MIN_COVERAGE = 0.10
 
 ZONE_LABELS = {
@@ -43,28 +39,34 @@ def register_callbacks(app):
         return {"start": start_date, "end": end_date}
 
     @app.callback(
-        Output("no2-map", "figure"),
         Output("no2-timeline", "figure"),
+        Input("submitted-range", "data"),
+        prevent_initial_call=True,
+    )
+    def update_timeline(submitted):
+        if not submitted:
+            raise PreventUpdate
+        df = get_no2(submitted["start"], submitted["end"])
+        return make_timeseries(df)
+
+    @app.callback(
+        Output("no2-map", "figure"),
         Input("submitted-range", "data"),
         Input("map-view", "value"),
         prevent_initial_call=True,
     )
-    def update_charts(submitted, view):
+    def update_map(submitted, view):
         # No submitted range yet — a dropdown change on its own must not fetch.
         if not submitted:
             raise PreventUpdate
         if view != PIXEL_VIEW and view not in ZONE_SETS:
             raise PreventUpdate
 
-        start_date, end_date = submitted["start"], submitted["end"]
-        df = get_no2(start_date, end_date)
-
+        df = get_no2(submitted["start"], submitted["end"])
         logger.info(f"Rendering '{view}' for {REGION_NAME}: {len(df)} rows")
 
         if view == PIXEL_VIEW:
-            map_fig = make_map(df, BBOX)
-        else:
-            stats = zonal_means(df, load_zones(view), min_coverage=MIN_COVERAGE)
-            map_fig = make_zonal_map(stats, BBOX, ZONE_LABELS.get(view, view))
+            return make_map(df, BBOX)
 
-        return map_fig, make_timeseries(df)
+        stats = zonal_means(df, load_zones(view), min_coverage=MIN_COVERAGE)
+        return make_zonal_map(stats, BBOX, ZONE_LABELS.get(view, view))

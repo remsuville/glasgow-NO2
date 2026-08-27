@@ -1,3 +1,4 @@
+.env
 *.nc
 __pycache__/
 *.py[cod]
@@ -7,9 +8,12 @@ connection_list.txt
 # Ignore markdown by default — un-ignore each doc explicitly.
 *.md
 !docs/summary.md
+!README.md
 
-# Downloaded boundary data
+# Downloaded data (boundaries, satellites, etc.)
 boundaries/*
+globe/data/*.czml
+globe/data/*.tle
 
 # Cached API responses and derived zone geometry
 cache/

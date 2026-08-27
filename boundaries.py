@@ -12,15 +12,13 @@ import os
 import geopandas as gpd
 from shapely.geometry import box
 
-from config import BBOX, CACHE_DIR
+from config import BBOX, BOUNDARY_DIR, CACHE_DIR
 
 logger = logging.getLogger(__name__)
 
-BOUNDARY_DIR = "boundaries"
 TARGET_CRS = "EPSG:4326"
-
-# Scotland's plausible lat/lon envelope
-SCOTLAND_ENVELOPE = {"west": -9.0, "south": 54.5, "east": -0.5, "north": 61.0}
+SIMPLIFY_TOLERANCE = 0.001
+SCOTLAND_BOUNDARY_CHECK = {"west": -9.0, "south": 54.5, "east": -0.5, "north": 61.0}
 
 # Column names vary between publishers, so each zone set lists
 # candidates and we resolve against whatever the downloaded file actually has
@@ -140,7 +138,7 @@ def _reproject(gdf, kind):
     logger.info("%s: reprojected bounds W%.4f S%.4f E%.4f N%.4f",
                 kind, west, south, east, north)
 
-    env = SCOTLAND_ENVELOPE
+    env = SCOTLAND_BOUNDARY_CHECK
     if not (env["west"] <= west and east <= env["east"]
             and env["south"] <= south and north <= env["north"]):
         raise ValueError(
@@ -181,6 +179,13 @@ def load_zones(kind, bbox=None, clip=False, use_cache=True):
     gdf = _repair_geometry(gdf)
     gdf = _reproject(gdf, kind)
 
+    before_pts = int(gdf.geometry.count_coordinates().sum())
+    gdf["geometry"] = gdf.geometry.simplify(SIMPLIFY_TOLERANCE)
+    after_pts = int(gdf.geometry.count_coordinates().sum())
+    logger.info("%s: simplified %d -> %d vertices (%.0f%% removed)",
+                kind, before_pts, after_pts,
+                100 * (1 - after_pts / before_pts))
+        
     # Selection happens only after reprojection — bbox is in degrees.
     window = box(bbox["west"], bbox["south"], bbox["east"], bbox["north"])
 

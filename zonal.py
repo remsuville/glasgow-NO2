@@ -1,17 +1,14 @@
 """Area-weighted zonal statistics: NO2 pixel footprints onto admin polygons.
 
-Each Sentinel-5P cell is ~5.5 km across, which is *coarser than most of the
-zones it is being aggregated onto*. That single fact drives every decision here:
+Each Sentinel-5P cell is ~5.5 km across, which is coarser than most of the
+zones it is being aggregated onto. Therefore:
 
-- Aggregation is **area-weighted overlap**, not pixel-centre-in-polygon. A
-  centre test would leave the majority of Data Zones — and a fair number of
-  Intermediate Zones — containing no pixel centre at all, and therefore no
-  value, despite sitting squarely under valid data.
+- Aggregation is area-weighted overlap, not pixel-centre-in-polygon
 - Every zone carries a `coverage` fraction alongside its mean. A zone can be
   handed a confident-looking number backed by a sliver of its area (sparse
-  swath days, or a zone straddling the bbox edge); coverage is what makes that
+  swath days, or a zone around the bbox edge); coverage is what makes that
   visible instead of letting the choropleth imply full support.
-- Zones with no overlapping valid pixel are *kept*, with a NaN mean. Dropping
+- Zones with no overlapping valid pixel are kept, with a NaN mean. Dropping
   them would silently shrink the study area between one date range and the next.
 """
 
@@ -34,14 +31,8 @@ logger = logging.getLogger(__name__)
 AREA_CRS = "EPSG:27700"
 
 
+# from cell (x,y) makes a 'box' with one step in each direction
 def cell_frame(cells, dx=None, dy=None, crs="EPSG:4326"):
-    """GeoDataFrame of one rectangle per pixel footprint.
-
-    `cells` holds cell *centres* in columns x, y; each geometry is the cell's
-    true extent, centre +/- half a grid step. Same footprint definition as
-    `figures.cell_polygons`, in the form the overlay needs rather than the form
-    Plotly needs.
-    """
     dx = grid_step(cells["x"]) if dx is None else dx
     dy = grid_step(cells["y"]) if dy is None else dy
     hx, hy = dx / 2, dy / 2
@@ -52,26 +43,8 @@ def cell_frame(cells, dx=None, dy=None, crs="EPSG:4326"):
     ]
     return gpd.GeoDataFrame(cells.copy(), geometry=geometry, crs=crs)
 
-
+# Calculates means
 def zonal_means(df, zones, dates=None, min_coverage=0.0):
-    """Area-weighted mean NO2 per zone.
-
-    `df` is the pixel frame (columns t, x, y, NO2); `zones` is a GeoDataFrame
-    from `boundaries.load_zones` (zone_id, zone_name, geometry) in EPSG:4326.
-    Pass `dates` to restrict the temporal window; by default every date in the
-    frame contributes.
-
-    Returns a GeoDataFrame in the zones' CRS with one row per zone:
-
-        zone_id, zone_name, no2_mean, coverage, n_cells, n_dates, geometry
-
-    `coverage` is the fraction of the zone's area overlapped by a valid pixel.
-    Zones below `min_coverage` keep their geometry but have `no2_mean` set to
-    NaN — the zone still exists, we just decline to claim a value for it.
-
-    `zones` being a plain argument is what makes recomputing against a
-    different boundary set a second call rather than a rewrite.
-    """
     if zones.crs is None:
         raise ValueError("zones has no CRS — load them via boundaries.load_zones()")
 
@@ -80,9 +53,7 @@ def zonal_means(df, zones, dates=None, min_coverage=0.0):
     if df.empty:
         raise ValueError("no NO2 rows to aggregate (empty frame or date filter)")
 
-    # Collapse time first: one value per cell, so the overlay runs once rather
-    # than once per date. Weighting is spatial, so the temporal mean is safe to
-    # take up front.
+    # Collapse time first: one value per cell, so the overlay runs once rather than once per date
     per_cell = (
         df.groupby(["x", "y"])
         .agg(NO2=("NO2", "mean"), n_dates=("t", "nunique"))
@@ -115,8 +86,7 @@ def zonal_means(df, zones, dates=None, min_coverage=0.0):
             "so check the study bbox and the zone extent actually overlap."
         )
 
-    # The weight is the intersected area itself — a pixel covering a tenth of a
-    # zone contributes a tenth as much as one covering it wholly.
+    # The weight is the same as intersected area
     parts["weight"] = parts.geometry.area
     parts["weighted"] = parts["weight"] * parts["NO2"]
 

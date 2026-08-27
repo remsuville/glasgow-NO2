@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Scotland Globe View</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <script src="/config.js"></script>
+  <style>
+    html, body, #cesiumContainer { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+    #nav { position: absolute; top: 12px; left: 12px; z-index: 10; font: 14px sans-serif; }
+    #nav a { color: #fff; background: rgba(0,0,0,.6); padding: 8px 14px; border-radius: 4px; text-decoration: none; }
+    #err { color: #fff; background: rgba(150,0,0,.85); padding: 8px 14px; border-radius: 4px; max-width: 420px; }
+    #satcard { position: absolute; z-index: 10; pointer-events: none; display: none; }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer">
+    <div id="satcard"></div>
+  </div>
+  <nav id="nav"><a href="/report/">Report &amp; statistics →</a></nav>
+  <script>
+    const OFFLINE = location.protocol === "file:";
+    const DATA_BASE = OFFLINE ? "data/" : "/globe/data/";
+    const token = (window.GLOBE_CONFIG || {}).cesiumToken;
+    if (token) Cesium.Ion.defaultAccessToken = token;
+
+    const viewer = new Cesium.Viewer("cesiumContainer", {
+      terrain: token ? Cesium.Terrain.fromWorldTerrain() : undefined,
+      animation: true,
+      timeline: true,
+      geocoder: false,
+      homeButton: false,
+      infoBox: false,
+      selectionIndicator: false,
+      navigationHelpButton: false,
+    });
+
+    Cesium.CzmlDataSource.load(DATA_BASE + "satellites.czml").then(
+      (ds) => viewer.dataSources.add(ds),
+      (err) => {
+        console.error("CZML load failed:", err);
+        document.getElementById("nav").insertAdjacentHTML(
+          "beforeend",
+          '<p id="err">Could not load satellites.czml. Run <code>python export_globe.py</code>, ' +
+          'then open the globe at <a href="http://127.0.0.1:8050/">127.0.0.1:8050</a>.</p>'
+        );
+      }
+    );
+
+    const card = document.getElementById("satcard");
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    let hovered = null;
+
+    handler.setInputAction((movement) => {
+      const picked = viewer.scene.pick(movement.endPosition);
+      hovered = picked && picked.id instanceof Cesium.Entity ? picked.id : null;
+      card.style.left = `${movement.endPosition.x + 14}px`;
+      card.style.top = `${movement.endPosition.y + 14}px`;
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    viewer.clock.onTick.addEventListener(() => {
+      const t = viewer.clock.currentTime;
+      const fixed = hovered && hovered.position && hovered.position.getValue(t);
+      if (!fixed) {
+        card.style.display = "none";
+        return;
+      }
+
+      const carto = Cesium.Cartographic.fromCartesian(fixed);
+      const t1 = Cesium.JulianDate.addSeconds(t, 1, new Cesium.JulianDate());
+      const a = hovered.position.getValueInReferenceFrame(t, Cesium.ReferenceFrame.INERTIAL, new Cesium.Cartesian3());
+      const b = hovered.position.getValueInReferenceFrame(t1, Cesium.ReferenceFrame.INERTIAL, new Cesium.Cartesian3());
+      const speed = Cesium.Cartesian3.distance(a, b) / 1000;
+      const note = hovered.properties?.note?.getValue(t) ?? "";
+
+      card.innerHTML = `<b>${hovered.name}</b><br>${note}<br>
+        Altitude ${(carto.height / 1000).toFixed(0)} km<br>
+        Orbital speed ${speed.toFixed(2)} km/s<br>
+        Sub-point ${Cesium.Math.toDegrees(carto.latitude).toFixed(1)}, ${Cesium.Math.toDegrees(carto.longitude).toFixed(1)}`;
+      card.style.display = "block";
+    });
+
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(-4.2, 54.0, 700000),
+      orientation: { pitch: Cesium.Math.toRadians(-60) },
+    });
+  </script>
+</body>
+</html>

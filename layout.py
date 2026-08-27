@@ -7,10 +7,9 @@ from config import DATE_RANGE, REGION_NAME
 layout = html.Div([
     html.H1(f"Sentinel-5P NO2 Dashboard — {REGION_NAME}"),
 
-    # Holds the *submitted* date range. The date picker alone must never drive
-    # a fetch — that is what the Submit button exists to gate — but the map-view
-    # dropdown does need to redraw live, so it reads the range from here rather
-    # than from the picker's uncommitted value.
+    html.A("Globe", href="/"),
+
+    # Holds the submitted date range. The date picker never fetches - only the Submit button does
     dcc.Store(id="submitted-range"),
 
     # Select Date
@@ -28,10 +27,7 @@ layout = html.Div([
                     style={"marginLeft": "10px"}),
     ], style={"marginLeft": "30px"}),
 
-    # One map, several views. The unaggregated grid is just another option here
-    # rather than a second always-on figure — stacking both meant two nearly
-    # identical maps competing for the same screen. Swapping views is live and
-    # cheap, which is also the point of keeping zonal_means() generic.
+    # One map, several views which can be changed live
     html.Div([
         html.Label("Map view"),
         dcc.Dropdown(

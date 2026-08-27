@@ -36,11 +36,7 @@ def cell_polygons(cells, dx=None, dy=None):
     """GeoJSON FeatureCollection of one rectangle per pixel footprint.
 
     `cells` has columns x, y holding cell *centres* (EPSG:4326). Each feature
-    is the cell's true extent, centre +/- half a step. Feature ids are the
-    positional index of `cells`, so `locations` can index straight into it.
-
-    This is the geometry area-weighted zonal statistics need — the map is just
-    the first consumer of it.
+    is the cell's true extent, centre +/- half a step.
     """
     dx = grid_step(cells["x"]) if dx is None else dx
     dy = grid_step(cells["y"]) if dy is None else dy
@@ -111,17 +107,8 @@ def make_map(df, bbox):
 
 
 def make_zonal_map(zonal, bbox, kind_label=""):
-    """Choropleth of area-weighted mean NO2 per administrative zone.
 
-    `zonal` comes from `zonal.zonal_means`. Zones whose mean was withheld (no
-    overlapping valid pixel, or coverage below the threshold) are drawn in flat
-    grey rather than omitted — a hole in the map reads as "no zone here", which
-    is a different and wrong claim.
-
-    Shares the `Reds` scale with `make_map` on purpose: both show the same
-    quantity in the same units, so the pixel map and the zonal map stay
-    visually comparable.
-    """
+    # Choropleth of area-weighted mean NO2 per administrative zone
     valued = zonal[zonal["no2_mean"].notna()]
     missing = zonal[zonal["no2_mean"].isna()]
 
