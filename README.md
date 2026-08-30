@@ -6,7 +6,13 @@ geographies using **area-weighted zonal statistics**
 
 NEW! a Cesium globe showing satellite paths (more to come!)
 
-![Zonal choropleth of mean NO₂ by Intermediate Zone](docs/screenshots/zonal-intzones.png)
+https://github.com/user-attachments/assets/REPLACE-WITH-UPLOADED-URL
+
+| Council areas | Intermediate Zones 2022 |
+|:---:|:---:|
+| ![Mean NO₂ by council area](docs/screenshots/council_zones.png) | ![Mean NO₂ by Intermediate Zone](docs/screenshots/intermediate_zones.png) |
+
+![Coverage-weighted daily mean NO₂](docs/screenshots/weighted_dailymean.png)
 
 ---
 
