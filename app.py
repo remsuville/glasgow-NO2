@@ -27,6 +27,10 @@ register_callbacks(app)
 def globe():
     return send_from_directory(GLOBE_DIR, "index.html")
 
+@server.route("/style.css")
+def globe_style():
+    return send_from_directory(GLOBE_DIR, "style.css")
+
 @server.route("/config.js")
 def globe_config():
     return Response(
@@ -37,14 +41,15 @@ def globe_config():
 @server.route("/globe/data/<path:filename>")
 def globe_data(filename):
     data_dir = GLOBE_DIR / "data"
-    if filename == "s5p.czml" and not (data_dir / filename).exists():
+    if filename == "satellites.czml":
         try:
-            ensure_czml()
-        except Exception:
-            logger.exception("could not generate %s", filename)
-            abort(503)
+            ensure_czml()   # Calls with no args - date range is baked elsewhere! FIX FIX FIX
+        except (OSError, ValueError, IndexError, KeyError):
+            logger.exception("could not regenerate %s", filename)
+            if not (data_dir / filename).exists():
+                abort(503)
     return send_from_directory(data_dir, filename)
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True) # Keep true to see changes live rather than restarting server

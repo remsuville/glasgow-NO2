@@ -10,6 +10,9 @@ zones it is being aggregated onto. Therefore:
   visible instead of letting the choropleth imply full support.
 - Zones with no overlapping valid pixel are kept, with a NaN mean. Dropping
   them would silently shrink the study area between one date range and the next.
+- Pixels without a value are dropped before the overlay. Carrying a NaN pixel
+  through would put its area in the weight sum but nothing in the weighted sum,
+  diluting the zone mean and inflating its coverage by the same area.
 """
 
 import logging
@@ -50,8 +53,21 @@ def zonal_means(df, zones, dates=None, min_coverage=0.0):
 
     if dates is not None:
         df = df[df["t"].isin(dates)]
+
     if df.empty:
         raise ValueError("no NO2 rows to aggregate (empty frame or date filter)")
+
+    # Measured before the NaN drop: an unvalued pixel still marks where the
+    # grid lines are, and dropping it first can only overestimate the spacing.
+    dx, dy = grid_step(df["x"]), grid_step(df["y"])
+
+    unvalued = df["NO2"].isna()
+    if unvalued.any():
+        logger.info("zonal: dropping %d rows with no NO2 value", int(unvalued.sum()))
+        df = df[~unvalued]
+
+    if df.empty:
+        raise ValueError("no NO2 rows to aggregate (every pixel in range is unvalued)")
 
     # Collapse time first: one value per cell, so the overlay runs once rather than once per date
     per_cell = (
@@ -61,9 +77,7 @@ def zonal_means(df, zones, dates=None, min_coverage=0.0):
     )
     per_cell["cell_id"] = np.arange(len(per_cell))
 
-    # Step comes from the full frame: a sparse window can miss whole rows or
-    # columns of the grid and overestimate the spacing.
-    cells = cell_frame(per_cell, dx=grid_step(df["x"]), dy=grid_step(df["y"]))
+    cells = cell_frame(per_cell, dx=dx, dy=dy)
 
     logger.info(
         "zonal: %d cells x %d zones, area-weighted in %s",
@@ -135,7 +149,7 @@ if __name__ == "__main__":
     import pandas as pd
 
     from boundaries import load_zones
-    from config import CACHE_DIR, DATE_RANGE, REGION_NAME
+    from config import BBOX, CACHE_DIR, DATE_RANGE, REGION_NAME, bbox_key
 
     logging.basicConfig(
         level=logging.INFO,
@@ -143,8 +157,9 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     kind = sys.argv[1] if len(sys.argv) > 1 else "councils"
+    start, end = (d.replace("-", "") for d in DATE_RANGE)
     df = pd.read_parquet(
-        f"{CACHE_DIR}/{REGION_NAME}_{DATE_RANGE[0]}_{DATE_RANGE[1]}.parquet"
+        f"{CACHE_DIR}/{REGION_NAME}_{start}_{end}_{bbox_key(BBOX)}.parquet"
     )
     stats = zonal_means(df, load_zones(kind))
     ranked = stats.sort_values("no2_mean", ascending=False)

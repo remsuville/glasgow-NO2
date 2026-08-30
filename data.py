@@ -4,7 +4,7 @@ import xarray as xr
 import openeo
 import logging
 
-from config import BBOX, CACHE_DIR, REGION_NAME
+from config import BBOX, CACHE_DIR, REGION_NAME, bbox_key
 
 
 # Logger for issues
@@ -24,7 +24,8 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Data request
 def get_no2(start_date, end_date):
-    cache_file = f"{CACHE_DIR}/{REGION_NAME}_{start_date}_{end_date}.parquet"
+    stem = f"{REGION_NAME}_{start_date.replace('-', '')}_{end_date.replace('-', '')}_{bbox_key(BBOX)}"
+    cache_file = f"{CACHE_DIR}/{stem}.parquet"
     if os.path.exists(cache_file):
         logger.info(f"Cache: {cache_file}")
         return pd.read_parquet(cache_file)
@@ -37,7 +38,7 @@ def get_no2(start_date, end_date):
     )
 
     # Unique per request — a shared temp name cross-contaminates concurrent pulls
-    temp_file = f"{CACHE_DIR}/{REGION_NAME}_{start_date}_{end_date}_temp.nc"
+    temp_file = f"{CACHE_DIR}/{stem}_temp.nc"
     datacube.download(temp_file)
 
     try:
@@ -52,8 +53,6 @@ def get_no2(start_date, end_date):
         if os.path.exists(temp_file):
             os.remove(temp_file)
             logger.info(f"Removed temp file: {temp_file}")
-
-    df = df[df['NO2'] > 0]
 
     df.to_parquet(cache_file)
     logger.info(f"Cached to {cache_file}")

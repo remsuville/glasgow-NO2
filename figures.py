@@ -1,7 +1,6 @@
 import json
 
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
 
 from config import REGION_NAME
@@ -21,7 +20,7 @@ def _zoom_for_bbox(bbox):
 def grid_step(values):
     """Spacing between adjacent grid coordinates.
 
-    openEO resamples S5P onto a regular lat/lon grid, so every gap between
+    openEO resamples S5P data onto a regular lat/lon grid, so every gap between
     *adjacent* unique coordinates is identical. The median is taken because
     the grid is sparse — a date with no swath coverage leaves holes, and
     those gaps are multiples of the true step, never smaller than it.
@@ -58,7 +57,30 @@ def cell_polygons(cells, dx=None, dy=None):
     return {"type": "FeatureCollection", "features": features}
 
 
+def _empty_map(bbox, message):
+    fig = go.Figure(go.Choroplethmap(
+        geojson={"type": "FeatureCollection", "features": []}, locations=[], z=[],
+    ))
+    fig.update_layout(
+        map_style="open-street-map",
+        map_center={"lat": (bbox["north"] + bbox["south"]) / 2,
+                    "lon": (bbox["west"] + bbox["east"]) / 2},
+        map_zoom=_zoom_for_bbox(bbox),
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
+        annotations=[{
+            "text": message, "showarrow": False,
+            "xref": "paper", "yref": "paper", "x": 0.5, "y": 0.5,
+            "font": {"size": 15}, "bgcolor": "rgba(255,255,255,0.88)",
+            "bordercolor": "rgba(0,0,0,0.25)", "borderwidth": 1, "borderpad": 10,
+        }],
+    )
+    return fig
+
+
 def make_map(df, bbox):
+    if df.empty or not df["NO2"].notna().any():
+        return _empty_map(bbox, "No valid NO2 retrievals in this period")
+
     valid_counts = df.groupby("t")["NO2"].count()
     best_day = valid_counts.idxmax()
     all_dates = sorted(df["t"].unique())
@@ -66,7 +88,7 @@ def make_map(df, bbox):
     t_start = max(0, best_idx - 4)
     t_end = min(len(all_dates) - 1, best_idx + 4)
     window_dates = all_dates[t_start : t_end + 1]
-    window_df = df[df["t"].isin(window_dates)]
+    window_df = df[df["t"].isin(window_dates)].dropna(subset=["NO2"])
     no2_mean = window_df.groupby(["x", "y"])["NO2"].mean().reset_index()
 
     # Step comes from the full frame, not the windowed subset: a sparse window
@@ -167,10 +189,31 @@ def make_zonal_map(zonal, bbox, kind_label=""):
 
 
 def make_timeseries(df):
-    daily_mean = df.groupby("t")["NO2"].mean().reset_index()
-    return px.line(
-        daily_mean,
-        x="t", y="NO2",
-        title=f"Daily Mean NO2 — {REGION_NAME}",
-        labels={"t": "Date", "NO2": "NO2 (mol/m2)"},
+    daily = df.groupby("t")["NO2"].agg(NO2="mean", n_pixels="count").reset_index()
+
+    fig = go.Figure(go.Scatter(
+        x=daily["t"], y=daily["NO2"],
+        mode="lines+markers",
+        line={"width": 1, "color": "rgba(178,58,58,0.5)"},
+        marker={
+            "size": daily["n_pixels"],
+            "sizemode": "area",
+            "sizeref": 2.0 * daily["n_pixels"].max() / (22.0 ** 2),
+            "sizemin": 6,
+            "color": "rgb(178,58,58)",
+            "line": {"width": 0.5, "color": "white"},
+        },
+        customdata=daily[["n_pixels"]],
+        hovertemplate=(
+            "%{x|%Y-%m-%d}<br>"
+            "mean NO2: %{y:.3e} mol/m2<br>"
+            "valid pixels: %{customdata[0]:,}"
+            "<extra></extra>"
+        ),
+    ))
+    fig.update_layout(
+        title=f"Daily Mean NO2 — {REGION_NAME} (marker size = valid pixel count)",
+        xaxis_title="Date", yaxis_title="NO2 (mol/m2)",
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
     )
+    return fig

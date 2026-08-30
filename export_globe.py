@@ -1,7 +1,8 @@
 """Export static assets for the Cesium globe."""
 
+import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from skyfield.api import load
@@ -17,6 +18,32 @@ SATELLITES = [
     ("ISS", 25544, [200, 210, 255, 200], "Good 'ole classic, 51.6 deg inclination"),
     ("Meteosat-12", 54743, [255, 120, 120, 200], "Geostationary imager over Europe"),
 ]
+
+
+def default_window(days=1):
+    """The window the globe covers when no explicit one is given.
+
+    Truncated to UTC midnight so the signature is stable within a day, and
+    returned naive because _span appends the Z itself.
+    """
+    start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0, tzinfo=None
+    )
+    return start, start + timedelta(days=days)
+
+
+def _signature(start, end):
+    """Digest of every input the CZML is built from."""
+    payload = json.dumps(
+        {
+            "satellites": SATELLITES,
+            "sample_seconds": SAMPLE_SECONDS,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha1(payload.encode()).hexdigest()
 
 
 def _span(start, end):
@@ -86,6 +113,7 @@ def write_satellites_czml(start, end):
             "name": "satellites",
             "version": "1.0",
             "clock": {"interval": interval, "currentTime": epoch, "multiplier": 60},
+            "properties": {"signature": _signature(start, end)},
         }
     ] + [_packet(entry, start, end, ts) for entry in SATELLITES]
 
@@ -93,16 +121,28 @@ def write_satellites_czml(start, end):
     path.write_text(json.dumps(czml))
     return path
     
-def ensure_czml(start, end):
-    """Write the CZML if it isn't already on disk. Returns the path."""
+def ensure_czml(start=None, end=None):
+    """Write the CZML unless the one on disk was built from these same inputs.
+
+    Existence alone is not enough: a changed SATELLITES list or window has to
+    invalidate the file, or the globe keeps serving whatever was written first.
+    """
+    if start is None or end is None:
+        start, end = default_window()
+
     path = OUT_DIR / "satellites.czml"
     if path.exists():
-        return path
+        try:
+            document = json.loads(path.read_text())[0]
+        except (OSError, ValueError, IndexError):
+            document = {}
+        if (document.get("properties") or {}).get("signature") == _signature(start, end):
+            return path
+
     return write_satellites_czml(start, end)
 
 
 if __name__ == "__main__":
-    start = datetime(2026, 8, 20, 0, 0, 0)
-    end = start + timedelta(days=1)
+    start, end = default_window()
     path = write_satellites_czml(start, end)
     print(f"wrote {path} ({path.stat().st_size / 1024:.0f} KB)")

@@ -12,7 +12,7 @@ import os
 import geopandas as gpd
 from shapely.geometry import box
 
-from config import BBOX, BOUNDARY_DIR, CACHE_DIR
+from config import BBOX, BOUNDARY_DIR, CACHE_DIR, bbox_key
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,8 @@ def load_zones(kind, bbox=None, clip=False, use_cache=True):
         raise KeyError(f"Unknown zone set '{kind}'. Known: {list(ZONE_SETS)}")
 
     bbox = BBOX if bbox is None else bbox
-    cache_file = f"{CACHE_DIR}/zones_{kind}_{'clip' if clip else 'whole'}.parquet"
+    extent = "clip" if clip else "whole"
+    cache_file = f"{CACHE_DIR}/zones_{kind}_{extent}_{bbox_key(bbox)}.parquet"
     if use_cache and os.path.exists(cache_file):
         logger.info("zones cache: %s", cache_file)
         return gpd.read_parquet(cache_file)

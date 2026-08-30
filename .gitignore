@@ -7,7 +7,8 @@ connection_list.txt
 
 # Ignore markdown by default — un-ignore each doc explicitly.
 *.md
-!docs/summary.md
+!docs/methodology.md
+!docs/CHANGELOG.md
 !README.md
 
 # Downloaded data (boundaries, satellites, etc.)
