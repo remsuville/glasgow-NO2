@@ -6,7 +6,7 @@ geographies using **area-weighted zonal statistics**
 
 NEW! a Cesium globe showing satellite paths (more to come!)
 
-https://github.com/user-attachments/assets/REPLACE-WITH-UPLOADED-URL
+https://github.com/user-attachments/assets/ddac0df6-e1bb-4c52-851e-f6699c0450c4
 
 | Council areas | Intermediate Zones 2022 |
 |:---:|:---:|
